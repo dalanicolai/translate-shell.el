@@ -148,14 +148,17 @@
         result)
     (if (assq word-sym translate-shell-cache)
         (setq result (assoc-default word-sym translate-shell-cache))
-      (setq result (shell-command-to-string (format translate-shell-command
-                                                    (shell-quote-argument word))))
+      (setq result (ansi-color-apply
+                    (shell-command-to-string
+                     (format translate-shell-command
+                             (shell-quote-argument word)))))
       (add-to-list 'translate-shell-cache (cons word-sym result)))
     (with-current-buffer (get-buffer-create "*Translate Shell*")
       (erase-buffer)
       (insert result)
       (goto-char (point-min))
       (display-buffer (current-buffer))
+      (text-mode)
       ;; Set up `imenu'
       (setq imenu-generic-expression
             `(("Sections"

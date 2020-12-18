@@ -113,11 +113,13 @@
 
 (defun translate-shell--read-string ()
   "A `read-string' wrapper for translate-shell."
-  (let* ((default (if (use-region-p)
-                      (buffer-substring-no-properties
-                       (region-beginning) (region-end))
-                    (let ((word (thing-at-point 'word)))
-                      (when word (substring-no-properties word)))))
+  (let* ((default (cond ((string-equal major-mode "pdf-view-mode")
+                         (car (pdf-view-active-region-text)))
+                        ((use-region-p)
+                         (buffer-substring-no-properties (region-beginning)
+                                                         (region-end)))
+                        (t (let ((word (thing-at-point 'word)))
+                             (when word (substring-no-properties word))))))
          (prompt (if (stringp default)
                      (format "Google Translate (default \"%s\"): " default)
                    "Google Translate: ")))

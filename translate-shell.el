@@ -96,7 +96,11 @@
   :link '(url-link :tag "Github" "https://github.com/xuchunyang/translate-shell.el"))
 
 (defcustom translate-shell-target-language nil
-  "Target language for translate-shell."
+  "Target language for translate-shell.
+Must be a string with the full English name of the language. `M-x
+translate-shell-available-languages' lists all available
+languages. To set language for current session only use `M-x
+translate-shell-set-target-language.'"
   :type 'string)
 
 (defcustom translate-shell-command "trans"
@@ -112,25 +116,32 @@
   "Cache alist for `translate-shell-brief'.")
 
 (defun translate-shell-lang-alist ()
-  (let ((bin (shell-command-to-string "echo -n $(which trans)"))
+  (let ((bin (shell-command-to-string
+              (format "echo -n $(which %s)" translate-shell-command)))
         lang-alist)
-    (with-temp-buffer (insert-file-contents-literally bin)
-                      (while (re-search-forward 
-                              "^Locale\\[\"\\([a-z]*\\)\"\\]\\[\"name\"\\] *= \"\\(.*\\)\"" nil t)
-                        (setq lang-alist (cons
-                                          (cons (match-string 2) (match-string 1))
-                                          lang-alist))))
+    (with-temp-buffer
+      (insert-file-contents-literally bin)
+      (while (re-search-forward 
+              "^Locale\\[\"\\([a-z]*\\)\"\\]\\[\"name\"\\] *= \"\\(.*\\)\"" nil t)
+        (setq lang-alist (cons
+                          (cons (match-string 2) (match-string 1))
+                          lang-alist))))
     lang-alist))
+
+(defun translate-shell-available-languages ()
+  (interactive)
+  (shell-command "trans -R"))
 
 (defun translate-shell-set-target-language ()
   (interactive)
   (setq translate-shell-target-language (completing-read "Select target language: "
                                                  (translate-shell-lang-alist))))
 
-(defun translate-shell-command (verbose source target text)
+(defun translate-shell-command (verbose play source target text)
   (shell-command-to-string
    (concat translate-shell-command
            (if verbose "" " -b")
+           (when play " -p")
            (if source (concat " -s " source) "")
            (if target (concat " -t " target) "")
            " " text)))
@@ -150,47 +161,52 @@
     (read-string prompt nil 'translate-shell-history default)))
 
 ;;;###autoload
-(defun translate-shell-brief (word)
-  "Show the explanation of WORD in the echo area."
-  (interactive
-   (list (translate-shell--read-string)))
-  (let* ((lang-alist (translate-shell-lang-alist))
+(defun translate-shell-brief (text &optional arg)
+  "Show the explanation of WORD in the echo area.
+When prefixed with a
+`universal-argument' (\\[universal-argument]), also play
+pronunciation example."
+  (interactive "i\nP")
+  (let* ((query (or text (translate-shell--read-string)))
+         (lang-alist (translate-shell-lang-alist))
          (target-lang (unless translate-shell-target-language
                         (completing-read "Select target language: "
                                          lang-alist)))
          (target-lang-code (alist-get (or translate-shell-target-language
                                           target-lang)
                                       lang-alist nil nil #'string=))
-         (word-sym (intern word))
+         (word-sym (intern query))
          result)
-    (if (assq word-sym translate-shell-brief-cache)
+    (if (and (not arg) (assq word-sym translate-shell-brief-cache))
         (message (assoc-default word-sym translate-shell-brief-cache))
       (setq result (ansi-color-apply
-                    (translate-shell-command nil nil target-lang-code
-                                             (shell-quote-argument word))))
+                    (translate-shell-command nil arg nil target-lang-code
+                                             (shell-quote-argument query))))
         (message result)
         (add-to-list 'translate-shell-brief-cache (cons word-sym result)))))
 
 ;;;###autoload
-(defun translate-shell (word)
-  "Show the explanation of WORD in buffer."
-  (interactive
-   (list
-    (translate-shell--read-string)))
-  (let* ((lang-alist (translate-shell-lang-alist))
+(defun translate-shell (text &optional arg)
+  "Show the explanation of WORD in buffer.
+When prefixed with a
+`universal-argument' (\\[universal-argument]), also play
+pronunciation example."
+  (interactive "i\nP")
+  (let* ((query (or text (translate-shell--read-string)))
+         (lang-alist (translate-shell-lang-alist))
          (target-lang (unless translate-shell-target-language
                         (completing-read "Select target language: "
                                          lang-alist)))
          (target-lang-code (alist-get (or translate-shell-target-language
                                   target-lang)
                               lang-alist nil nil #'string=))
-        (word-sym (intern word))
+        (word-sym (intern query))
         result)
-    (if (assq word-sym translate-shell-cache)
+    (if (and (not arg) (assq word-sym translate-shell-cache))
         (setq result (assoc-default word-sym translate-shell-cache))
       (setq result (ansi-color-apply
-                     (translate-shell-command t nil target-lang-code
-                             (shell-quote-argument word))))
+                     (translate-shell-command t arg nil target-lang-code
+                             (shell-quote-argument query))))
       (add-to-list 'translate-shell-cache (cons word-sym result)))
     (with-current-buffer (get-buffer-create "*Translate Shell*")
       (erase-buffer)
